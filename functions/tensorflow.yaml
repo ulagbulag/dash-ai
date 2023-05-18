@@ -1,0 +1,47 @@
+---
+apiVersion: dash.ulagbulag.io/v1alpha1
+kind: Function
+metadata:
+  name: tensorflow
+  annotations:
+    dash.ulagbulag.io/title: ai-dev-tensorflow
+spec:
+  input:
+    - name: /
+      object:
+        children:
+          - /gpus/
+          - /image/
+          - /ip/
+          - /namespace/
+          - /user/
+    - name: /gpus/
+      integer:
+        default: 1
+    - name: /image/
+      string:
+        default: nvcr.io/nvidia/tensorflow:23.04-tf2-py3
+        dynamic: {}
+    - name: /ip/
+      ip: {}
+    - name: /namespace/
+      string:
+        default: dash-ai
+        dynamic: {}
+    - name: /user/
+      object:
+        children:
+          - /user/name/
+          - /user/password/
+    - name: /user/name/
+      string:
+        dynamic: {}
+    - name: /user/password/
+      string:
+        dynamic: {}
+  actor:
+    job:
+      configMapRef:
+        name: ai-dev
+        namespace: dash-ai
+        path: ai-dev.yaml.j2

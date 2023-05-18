@@ -1,0 +1,82 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ metadata.name }}-{{ spec.user.name }}"
+  namespace: "{{ metadata.namespace }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: "{{ metadata.name }}"
+      user.name: "{{ spec.user.name }}"
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        name: "{{ metadata.name }}"
+        user.name: "{{ spec.user.name }}"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/kiss
+                    operator: In
+                    values:
+                      - Compute
+      containers:
+        - name: dev
+          image: "{{ spec.image }}"
+          command:
+            - bash
+            - -c
+          args:
+            - >
+              apt-get update
+              && apt-get install -y ssh sudo
+              && mkdir /run/sshd
+              && useradd -m -d '/home/tmp' -g 'users' -G sudo -s '/bin/bash' "{{ spec.user.name }}"
+              && chown '{{ spec.user.name }}:users' "/home/user"
+              && su "{{ spec.user.name }}" -c "cp -rn '/home/tmp/.' '/home/user/'"
+              && usermod -d '/home/user' "{{ spec.user.name }}"
+              && rm -rf '/home/tmp'
+              && echo -e "{{ spec.user.password }}\n{{ spec.user.password }}\n" | passwd "{{ spec.user.name }}"
+              && exec /usr/sbin/sshd -D
+          ports:
+            - name: ssh
+              protocol: TCP
+              containerPort: 22
+{% if spec.gpus > 0 %}
+          resources:
+            limits:
+              nvidia.com/gpu: "{{ spec.gpus }}"
+{% endif %}
+          volumeMounts:
+            - name: workspace
+              mountPath: "/home/user"
+      volumes:
+        - name: workspace
+          hostPath:
+            path: "/opt/vine/local/workspace/{{ metadata.namespace }}/{{ spec.user.name }}/{{ metadata.name }}"
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ metadata.name }}-{{ spec.user.name }}"
+  namespace: "{{ metadata.namespace }}"
+spec:
+  selector:
+    name: "{{ metadata.name }}"
+    user.name: "{{ spec.user.name }}"
+  ports:
+    - name: ssh
+      port: 9894
+      protocol: TCP
+      targetPort: 22
+  type: LoadBalancer
+  loadBalancerIP: "{{ spec.ip }}"
