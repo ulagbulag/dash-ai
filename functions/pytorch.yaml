@@ -3,8 +3,8 @@ apiVersion: dash.ulagbulag.io/v1alpha1
 kind: Function
 metadata:
   name: pytorch
-  annotations:
-    dash.ulagbulag.io/title: ai-dev-pytorch
+  labels:
+    dash.ulagbulag.io/alias: ai-dev-pytorch
 spec:
   input:
     - name: /

@@ -3,8 +3,8 @@ apiVersion: dash.ulagbulag.io/v1alpha1
 kind: Function
 metadata:
   name: tensorflow
-  annotations:
-    dash.ulagbulag.io/title: ai-dev-tensorflow
+  labels:
+    dash.ulagbulag.io/alias: ai-dev-tensorflow
 spec:
   input:
     - name: /
