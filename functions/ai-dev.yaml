@@ -2,9 +2,9 @@
 apiVersion: dash.ulagbulag.io/v1alpha1
 kind: Function
 metadata:
-  name: tensorflow
+  name: ai-dev
   labels:
-    dash.ulagbulag.io/alias: ai-dev-tensorflow
+    dash.ulagbulag.io/alias: ai-development-framework
 spec:
   input:
     - name: /
@@ -19,9 +19,11 @@ spec:
       integer:
         default: 1
     - name: /image/
-      string:
-        default: nvcr.io/nvidia/tensorflow:23.04-tf2-py3
-        dynamic: {}
+      oneOfStrings:
+        choices:
+          - pytorch
+          - tensorflow
+        default: pytorch
     - name: /ip/
       ip: {}
     - name: /namespace/
