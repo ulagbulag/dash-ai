@@ -3,6 +3,7 @@ apiVersion: dash.ulagbulag.io/v1alpha1
 kind: Function
 metadata:
   name: ai-dev
+  namespace: dash-ai
   labels:
     dash.ulagbulag.io/alias: ai-development-framework
 spec:
@@ -43,7 +44,7 @@ spec:
         dynamic: {}
   actor:
     job:
-      configMapRef:
-        name: ai-dev
-        namespace: dash-ai
-        path: ai-dev.yaml.j2
+      source:
+        configMapRef:
+          name: ai-dev
+          path: ai-dev.yaml.j2
