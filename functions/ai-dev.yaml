@@ -8,14 +8,6 @@ metadata:
     dash.ulagbulag.io/alias: ai-development-framework
 spec:
   input:
-    - name: /
-      object:
-        children:
-          - /gpus/
-          - /image/
-          - /ip/
-          - /namespace/
-          - /user/
     - name: /gpus/
       integer:
         default: 1
@@ -31,11 +23,6 @@ spec:
       string:
         default: dash-ai
         dynamic: {}
-    - name: /user/
-      object:
-        children:
-          - /user/name/
-          - /user/password/
     - name: /user/name/
       string:
         dynamic: {}
