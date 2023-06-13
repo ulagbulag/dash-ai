@@ -19,10 +19,6 @@ spec:
         default: pytorch
     - name: /ip/
       ip: {}
-    - name: /namespace/
-      string:
-        default: dash-ai
-        dynamic: {}
     - name: /user/name/
       string:
         dynamic: {}
