@@ -19,12 +19,20 @@ spec:
         default: pytorch
     - name: /ip/
       ip: {}
-    - name: /user/name/
-      string:
-        dynamic: {}
     - name: /user/password/
       string:
         dynamic: {}
+    - name: /storage/class/
+      string:
+        default: ceph-block
+        dynamic: {}
+    - name: /storage/volume/
+      string:
+        default: 1Ti
+        dynamic: {}
+    - name: /vnc/enabled/
+      boolean:
+        default: false
   actor:
     job:
       source:

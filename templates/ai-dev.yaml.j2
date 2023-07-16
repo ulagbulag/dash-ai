@@ -1,5 +1,9 @@
 {% if spec.image == "pytorch" %}
+{% if spec.vnc.enabled %}
+{% set image = "quay.io/ulagbulag/openark-vine-desktop:latest-ubuntu-pytorch" %}
+{% else %}
 {% set image = "nvcr.io/nvidia/pytorch:23.04-py3" %}
+{% endif %}
 {% elif spec.image == "tensorflow" %}
 {% set image = "nvcr.io/nvidia/tensorflow:23.04-tf2-py3" %}
 {% endif %}
@@ -7,7 +11,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: "{{ metadata.name }}-{{ spec.user.name }}-{{ spec.image }}"
+  name: "{{ metadata.name }}"
   namespace: "{{ metadata.namespace }}"
 spec:
   replicas: 1
@@ -15,7 +19,6 @@ spec:
     matchLabels:
       image: "{{ spec.image }}"
       name: "{{ metadata.name }}"
-      user.name: "{{ spec.user.name }}"
   strategy:
     rollingUpdate:
       maxUnavailable: 1
@@ -24,7 +27,6 @@ spec:
       labels:
         image: "{{ spec.image }}"
         name: "{{ metadata.name }}"
-        user.name: "{{ spec.user.name }}"
     spec:
       affinity:
         nodeAffinity:
@@ -36,6 +38,67 @@ spec:
                     values:
                       - Compute
       containers:
+{% if spec.vnc.enabled %}
+        - name: xvfb
+          image: quay.io/ulagbulag/openark-vine-xvfb:latest
+          imagePullPolicy: Always
+          env:
+            - name: DISPLAY
+              value: ":99"
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 100Mi
+            limits:
+              cpu: 4000m
+              memory: 2Gi
+          volumeMounts:
+            - name: x11
+              mountPath: "/tmp/.X11-unix"
+        - name: x11vnc
+          image: quay.io/ulagbulag/openark-vine-x11vnc:latest
+          imagePullPolicy: Always
+          env:
+            - name: DISPLAY
+              value: ":99"
+            - name: X11VNC_ARGS
+              value: -cursor most -noscr -nowcr -nowf -noxdamage
+            - name: X11VNC_MULTIPTR
+              value: "false"
+            - name: X11VNC_XKB
+              value: "true"
+          ports:
+            - name: vnc
+              protocol: TCP
+              containerPort: 5900
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 100Mi
+            limits:
+              cpu: 4000m
+              memory: 2Gi
+          volumeMounts:
+            - name: x11
+              mountPath: "/tmp/.X11-unix"
+        - name: novnc
+          image: quay.io/ulagbulag/openark-vine-novnc:latest
+          imagePullPolicy: Always
+          env:
+            - name: NOVNC_VNC_PATH
+              value: "/dash/ai/{{ metadata.name }}/vnc"
+          ports:
+            - name: novnc
+              protocol: TCP
+              containerPort: 6080
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 100Mi
+            limits:
+              cpu: 4000m
+              memory: 2Gi
+{% endif %}
         - name: dev
           image: "{{ image }}"
           command:
@@ -43,16 +106,19 @@ spec:
             - -c
           args:
             - >
-              apt-get update
-              && apt-get install -y ssh sudo
-              && mkdir /run/sshd
-              && useradd -m -d '/home/tmp' -g 'users' -G sudo -s '/bin/bash' "{{ spec.user.name }}"
-              && chown '{{ spec.user.name }}:users' "/home/user"
-              && su "{{ spec.user.name }}" -c "cp -rn '/home/tmp/.' '/home/user/'"
-              && usermod -d '/home/user' "{{ spec.user.name }}"
-              && rm -rf '/home/tmp'
-              && echo -e "{{ spec.user.password }}\n{{ spec.user.password }}\n" | passwd "{{ spec.user.name }}"
-              && exec /usr/sbin/sshd -D
+              sudo apt-get update
+              && sudo apt-get install -y ssh sudo
+              && sudo mkdir /run/sshd
+              && sudo chown 'user:users' "/home/user"
+              && echo -e "{{ spec.user.password }}\n{{ spec.user.password }}\n" | sudo passwd "user"
+{%- if spec.vnc.enabled -%}
+              && while ! test -e /tmp/.X11-unix/X99; do sleep 1; done
+              {# && dbus-launch xfce4-session & #}
+{%- endif -%}
+              && exec sudo /usr/sbin/sshd -D
+          env:
+            - name: DISPLAY
+              value: ":99"
           ports:
             - name: ssh
               protocol: TCP
@@ -63,24 +129,35 @@ spec:
               nvidia.com/gpu: "{{ spec.gpus }}"
 {% endif %}
           volumeMounts:
+            - name: ssh
+              mountPath: "/etc/ssh"
+{% if spec.vnc.enabled %}
+            - name: x11
+              mountPath: "/tmp/.X11-unix"
+{% endif %}
             - name: workspace
               mountPath: "/home/user"
       volumes:
+        - name: ssh
+          persistentVolumeClaim:
+            claimName: "{{ metadata.name }}-ssh"
+{% if spec.vnc.enabled %}
+        - name: x11
+          emptyDir: {}
+{% endif %}
         - name: workspace
-          hostPath:
-            path: "/opt/vine/local/workspace/{{ metadata.namespace }}/{{ spec.user.name }}/{{ metadata.name }}"
-            type: DirectoryOrCreate
+          persistentVolumeClaim:
+            claimName: "{{ metadata.name }}"
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: "{{ metadata.name }}-{{ spec.user.name }}-{{ spec.image }}"
+  name: "{{ metadata.name }}"
   namespace: "{{ metadata.namespace }}"
 spec:
   selector:
     image: "{{ spec.image }}"
     name: "{{ metadata.name }}"
-    user.name: "{{ spec.user.name }}"
   ports:
     - name: ssh
       port: 9894
@@ -88,3 +165,80 @@ spec:
       targetPort: 22
   type: LoadBalancer
   loadBalancerIP: "{{ spec.ip }}"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "{{ metadata.name }}"
+  namespace: "{{ metadata.namespace }}"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: "{{ spec.storage.volume }}"
+  storageClassName: "{{ spec.storage.class }}"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "{{ metadata.name }}-ssh"
+  namespace: "{{ metadata.namespace }}"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: "64Mi"
+  storageClassName: "{{ spec.storage.class }}"
+###########################################################
+#   Remote Desktop Deployment                             #
+###########################################################
+{% if spec.vnc.enabled %}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ metadata.name }}-novnc"
+  namespace: "{{ metadata.namespace }}"
+spec:
+  selector:
+    image: "{{ spec.image }}"
+    name: "{{ metadata.name }}"
+  ports:
+    - name: novnc
+      port: 80
+      protocol: TCP
+      targetPort: 6080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{ metadata.name }}-novnc"
+  namespace: "{{ metadata.namespace }}"
+  annotations:
+    cert-manager.io/cluster-issuer: ingress-nginx-controller.vine.svc.ops.openark
+    kubernetes.io/ingress.class: ingress-nginx-controller.vine.svc.ops.openark
+    nginx.ingress.kubernetes.io/auth-response-headers: Authorization
+    nginx.ingress.kubernetes.io/auth-url: http://$host/oauth2/auth
+    nginx.ingress.kubernetes.io/auth-signin: http://$host/oauth2/start?rd=$escaped_request_uri
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    vine.ulagbulag.io/is-service: "true"
+    vine.ulagbulag.io/is-service-public: "false"
+    vine.ulagbulag.io/is-service-system: "true"
+    vine.ulagbulag.io/service-kind: noVNC ({{ metadata.name }}/{{ metadata.namespace }})
+spec:
+  rules:
+    - host: ingress-nginx-controller.vine.svc.ops.openark
+      http:
+        paths:
+          - path: "/dash/ai/{{ metadata.name }}/vnc(/|$)(.*)"
+            pathType: Prefix
+            backend:
+              service:
+                name: "{{ metadata.name }}-novnc"
+                port:
+                  number: 80
+{% endif %}
